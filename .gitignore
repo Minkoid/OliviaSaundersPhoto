@@ -40,6 +40,9 @@ yarn-error.log*
 /storage/
 /.uploads/
 
+# generated review screenshots
+/screenshots/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
