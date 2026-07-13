@@ -6,9 +6,12 @@ import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth/authorization';
 import { gallerySchema, imageMetadataSchema, reorderSchema } from '@/lib/validation';
 import { hashPassword } from '@/lib/auth/password';
-import { slugify } from '@/lib/utils';
+import { slugify, formatDate } from '@/lib/utils';
 import { recordAudit } from '@/lib/audit';
 import { deleteAsset } from '@/lib/images/ingest';
+import { sendEmail } from '@/lib/email/mailer';
+import { galleryAvailableEmail } from '@/lib/email/templates';
+import { getAppUrl } from '@/lib/env';
 
 export interface GalleryFormState {
   ok?: boolean;
@@ -175,6 +178,35 @@ export async function revokeClientFromGallery(galleryId: string, userId: string)
     metadata: { userId },
   });
   revalidatePath(`/admin/galleries/${galleryId}`);
+}
+
+/** Email all currently-assigned clients that their gallery is available. */
+export async function notifyGalleryClients(galleryId: string): Promise<{ sent: number }> {
+  await requireAdmin();
+  const gallery = await prisma.gallery.findUnique({
+    where: { id: galleryId },
+    include: {
+      access: { where: { revokedAt: null }, include: { user: { include: { clientProfile: true } } } },
+    },
+  });
+  if (!gallery) return { sent: 0 };
+
+  const galleryUrl = `${getAppUrl()}/gallery/${gallery.slug}`;
+  let sent = 0;
+  for (const access of gallery.access) {
+    if (!access.user.isActive) continue;
+    const ok = await sendEmail({
+      to: access.user.email,
+      ...galleryAvailableEmail({
+        displayName: access.user.clientProfile?.displayName ?? access.user.name ?? 'there',
+        galleryTitle: gallery.title,
+        galleryUrl,
+        expiresAt: gallery.expiresAt ? formatDate(gallery.expiresAt) : null,
+      }),
+    });
+    if (ok) sent += 1;
+  }
+  return { sent };
 }
 
 export async function setGalleryCover(galleryId: string, galleryImageId: string) {
