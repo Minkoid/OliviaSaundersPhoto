@@ -1,4 +1,3 @@
-import 'server-only';
 import { getServerEnv } from '@/lib/env';
 import { LocalStorageService } from './local';
 import { S3StorageService } from './s3';

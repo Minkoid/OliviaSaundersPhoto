@@ -1,4 +1,3 @@
-import 'server-only';
 import type { ImageAsset, ImageVisibility } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { getStorage, storageKeys } from '@/lib/storage';
