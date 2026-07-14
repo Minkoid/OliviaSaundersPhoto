@@ -11,8 +11,10 @@ import { recordAudit } from '@/lib/audit';
 import { hashIp } from '@/lib/crypto';
 
 export const dynamic = 'force-dynamic';
-// Streaming a ZIP can take time for large galleries.
-export const maxDuration = 300;
+// 60s is the max on Vercel's free (Hobby) plan (Pro allows up to 300). The ZIP is
+// streamed, not buffered; for very large galleries use the async archive approach
+// documented in DEPLOYMENT.md. See DEPLOY_FREE.md.
+export const maxDuration = 60;
 
 /**
  * Full-gallery ZIP download.

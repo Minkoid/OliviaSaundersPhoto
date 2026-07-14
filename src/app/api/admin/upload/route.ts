@@ -5,7 +5,9 @@ import { ingestImage, ImageValidationError } from '@/lib/images/ingest';
 import { recordAudit } from '@/lib/audit';
 
 export const runtime = 'nodejs';
-export const maxDuration = 120;
+// 60s is the max on Vercel's free (Hobby) plan; raise on Pro if needed. Uploading
+// in modest batches keeps well within this. See DEPLOY_FREE.md.
+export const maxDuration = 60;
 
 /**
  * Admin image upload endpoint.

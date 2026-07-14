@@ -284,6 +284,7 @@ public/placeholders/  generated placeholder plates
 
 ## Further documentation
 
+- [`DEPLOY_FREE.md`](./DEPLOY_FREE.md) — **step-by-step free deployment** (Vercel + Neon + Cloudflare R2 + Resend).
 - [`ARCHITECTURE.md`](./ARCHITECTURE.md) — architecture, data model, routes, storage & security model.
 - [`DEPLOYMENT.md`](./DEPLOYMENT.md) — production deployment (Vercel + Neon/Supabase + R2/S3 + Resend), DNS, monitoring.
 - [`SECURITY.md`](./SECURITY.md) — security model and pre-launch checklist.
