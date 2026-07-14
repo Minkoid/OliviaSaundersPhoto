@@ -1,0 +1,450 @@
+// Olivia Saunders Photography — data model
+// PostgreSQL + Prisma. See ARCHITECTURE.md for the full domain overview.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ----------------------------------------------------------------------------
+// Enums
+// ----------------------------------------------------------------------------
+
+enum Role {
+  ADMIN
+  CLIENT
+}
+
+enum ImageVisibility {
+  PUBLIC
+  PRIVATE
+}
+
+enum DownloadResolution {
+  WEB
+  FULL
+}
+
+enum EnquiryType {
+  WEDDING
+  PORTRAIT
+  FAMILY
+  EVENT
+  COMMERCIAL
+  EDITORIAL
+  OTHER
+}
+
+enum EnquiryStatus {
+  NEW
+  READ
+  ARCHIVED
+}
+
+enum AuditAction {
+  USER_LOGIN
+  USER_LOGIN_FAILED
+  USER_LOGOUT
+  CLIENT_INVITED
+  CLIENT_INVITE_RESENT
+  CLIENT_ACCESS_RESET
+  CLIENT_DISABLED
+  PORTFOLIO_CREATED
+  PORTFOLIO_UPDATED
+  PORTFOLIO_DELETED
+  PORTFOLIO_PUBLISHED
+  GALLERY_CREATED
+  GALLERY_UPDATED
+  GALLERY_DELETED
+  GALLERY_PUBLISHED
+  GALLERY_ACCESS_GRANTED
+  GALLERY_ACCESS_REVOKED
+  IMAGE_UPLOADED
+  IMAGE_DELETED
+  IMAGE_DOWNLOADED
+  GALLERY_DOWNLOADED
+  SETTINGS_UPDATED
+  PAGE_UPDATED
+  PASSWORD_RESET_REQUESTED
+  PASSWORD_RESET_COMPLETED
+}
+
+// ----------------------------------------------------------------------------
+// Auth / users (Auth.js compatible)
+// ----------------------------------------------------------------------------
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  emailVerified DateTime?
+  name          String?
+  // Argon2/bcrypt hash. Null for accounts that only use magic links / OAuth.
+  passwordHash  String?
+  role          Role      @default(CLIENT)
+  isActive      Boolean   @default(true)
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  accounts      Account[]
+  sessions      Session[]
+  clientProfile ClientProfile?
+  galleryAccess GalleryAccess[]
+  favourites    Favourite[]
+  downloadEvents DownloadEvent[]
+  tokens        VerificationToken[]
+  auditLogs     AuditLog[]      @relation("AuditActor")
+
+  @@index([role])
+  @@index([isActive])
+}
+
+// Auth.js Account (OAuth / external providers). Retained for extensibility.
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// Multi-purpose token store: email verification, password reset, invitations,
+// and optional magic links. `identifier` is the user email.
+model VerificationToken {
+  id         String   @id @default(cuid())
+  identifier String
+  // Stores a HASH of the token, never the raw value.
+  token      String   @unique
+  purpose    String   @default("VERIFY") // VERIFY | RESET | INVITE | MAGIC
+  expires    DateTime
+  consumedAt DateTime?
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@unique([identifier, token])
+  @@index([identifier])
+  @@index([purpose])
+}
+
+// Extended client details, separate from the auth User for clean separation.
+model ClientProfile {
+  id           String    @id @default(cuid())
+  userId       String    @unique
+  displayName  String
+  company      String?
+  phone        String?
+  notes        String?   // Admin-only private notes.
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ----------------------------------------------------------------------------
+// Public portfolio
+// ----------------------------------------------------------------------------
+
+model Portfolio {
+  id           String    @id @default(cuid())
+  slug         String    @unique
+  title        String
+  category     String    // e.g. Weddings, Portraits, Country life
+  intro        String?   @db.Text
+  description  String?   @db.Text
+  isPublished  Boolean   @default(false)
+  sortOrder    Int       @default(0)
+  coverImageId String?   @unique
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  images     PortfolioImage[] @relation("PortfolioImages")
+  coverImage PortfolioImage?  @relation("PortfolioCover", fields: [coverImageId], references: [id])
+
+  @@index([isPublished, sortOrder])
+  @@index([category])
+}
+
+model PortfolioImage {
+  id               String          @id @default(cuid())
+  portfolioId      String
+  asset            ImageAsset      @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  assetId          String          @unique
+  caption          String?
+  sortOrder        Int             @default(0)
+  isFeatured       Boolean         @default(false)
+  // Editorial layout hint used by the varied portfolio layout engine.
+  layoutHint       String          @default("standard") // full | wide | tall | standard
+  visibility       ImageVisibility @default(PUBLIC)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  portfolio    Portfolio  @relation("PortfolioImages", fields: [portfolioId], references: [id], onDelete: Cascade)
+  coverOf      Portfolio? @relation("PortfolioCover")
+
+  @@index([portfolioId, sortOrder])
+  @@index([isFeatured])
+}
+
+// ----------------------------------------------------------------------------
+// Private galleries
+// ----------------------------------------------------------------------------
+
+model Gallery {
+  id             String    @id @default(cuid())
+  slug           String    @unique
+  title          String
+  clientName     String
+  shootDate      DateTime?
+  message        String?   @db.Text
+  coverImageId   String?   @unique
+  expiresAt      DateTime?
+  isPublished    Boolean   @default(false)
+  isDisabled     Boolean   @default(false)
+  // Optional gallery-level password (bcrypt hash), in addition to user login.
+  passwordHash   String?
+  allowImageDownload   Boolean @default(false)
+  allowGalleryDownload Boolean @default(false)
+  allowFullResolution  Boolean @default(false)
+  showImageNumbers     Boolean @default(false)
+  watermarkEnabled     Boolean @default(false)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  images     GalleryImage[]  @relation("GalleryImages")
+  coverImage GalleryImage?   @relation("GalleryCover", fields: [coverImageId], references: [id])
+  access     GalleryAccess[]
+  favourites Favourite[]
+  downloads  DownloadEvent[]
+  files      GalleryFile[]
+
+  @@index([isPublished, isDisabled])
+  @@index([expiresAt])
+}
+
+// Join table: which users may access which galleries (many-to-many).
+model GalleryAccess {
+  id         String    @id @default(cuid())
+  galleryId  String
+  userId     String
+  grantedAt  DateTime  @default(now())
+  revokedAt  DateTime?
+
+  gallery Gallery @relation(fields: [galleryId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([galleryId, userId])
+  @@index([userId])
+  @@index([galleryId])
+}
+
+model GalleryImage {
+  id          String          @id @default(cuid())
+  galleryId   String
+  asset       ImageAsset      @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  assetId     String          @unique
+  caption     String?
+  sortOrder   Int             @default(0)
+  // Per-image override; falls back to gallery-level permission when null.
+  allowDownload Boolean?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  gallery    Gallery     @relation("GalleryImages", fields: [galleryId], references: [id], onDelete: Cascade)
+  coverOf    Gallery?    @relation("GalleryCover")
+  favourites Favourite[]
+
+  @@index([galleryId, sortOrder])
+}
+
+// Additional downloadable files attached to a gallery (e.g. print release PDF).
+model GalleryFile {
+  id           String   @id @default(cuid())
+  galleryId    String
+  storageKey   String
+  filename     String
+  mimeType     String
+  fileSize     Int
+  createdAt    DateTime @default(now())
+
+  gallery Gallery @relation(fields: [galleryId], references: [id], onDelete: Cascade)
+
+  @@index([galleryId])
+}
+
+model Favourite {
+  id             String   @id @default(cuid())
+  userId         String
+  galleryId      String
+  galleryImageId String
+  createdAt      DateTime @default(now())
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gallery      Gallery      @relation(fields: [galleryId], references: [id], onDelete: Cascade)
+  galleryImage GalleryImage @relation(fields: [galleryImageId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, galleryImageId])
+  @@index([galleryId])
+  @@index([userId])
+}
+
+model DownloadEvent {
+  id             String             @id @default(cuid())
+  userId         String?
+  galleryId      String?
+  galleryImageId String?
+  resolution     DownloadResolution @default(WEB)
+  // "image" | "gallery-zip" | "file"
+  kind           String             @default("image")
+  ipHash         String?
+  userAgent      String?
+  createdAt      DateTime           @default(now())
+
+  user    User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  gallery Gallery? @relation(fields: [galleryId], references: [id], onDelete: SetNull)
+
+  @@index([galleryId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// ----------------------------------------------------------------------------
+// Shared media asset — a single uploaded image with its processed variants.
+// Referenced by either a PortfolioImage or a GalleryImage.
+// ----------------------------------------------------------------------------
+
+model ImageAsset {
+  id               String          @id @default(cuid())
+  // Storage keys per variant. Originals live in the private bucket.
+  originalKey      String
+  thumbKey         String?
+  smallKey         String?
+  displayKey       String?
+  largeKey         String?
+  watermarkKey     String?
+  originalFilename String
+  displayFilename  String?
+  mimeType         String
+  width            Int?
+  height           Int?
+  fileSize         Int?
+  orientation      Int?
+  altText          String?
+  blurDataUrl      String?         @db.Text
+  visibility       ImageVisibility @default(PRIVATE)
+  processingStatus String          @default("pending") // pending | processing | ready | failed
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  portfolioImage PortfolioImage?
+  galleryImage   GalleryImage?
+
+  @@index([visibility])
+  @@index([processingStatus])
+}
+
+// ----------------------------------------------------------------------------
+// Enquiries (contact form)
+// ----------------------------------------------------------------------------
+
+model Enquiry {
+  id          String        @id @default(cuid())
+  name        String
+  email       String
+  phone       String?
+  type        EnquiryType   @default(OTHER)
+  eventDate   DateTime?
+  location    String?
+  message     String        @db.Text
+  status      EnquiryStatus @default(NEW)
+  ipHash      String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([status, createdAt])
+}
+
+// ----------------------------------------------------------------------------
+// Site content & settings (editable via admin)
+// ----------------------------------------------------------------------------
+
+model SiteSettings {
+  id                String   @id @default("singleton")
+  studioName        String   @default("Olivia Saunders")
+  tagline           String?
+  contactEmail      String?
+  contactPhone      String?
+  areasServed       String?  @db.Text
+  responseTime      String?
+  studioLocation    String?
+  instagramUrl      String?
+  pinterestUrl      String?
+  facebookUrl       String?
+  footerText        String?  @db.Text
+  seoTitle          String?
+  seoDescription    String?  @db.Text
+  ogImageKey        String?
+  updatedAt         DateTime @updatedAt
+}
+
+// Flexible page/section content blocks keyed by slug (home, about, etc.).
+model PageContent {
+  id          String   @id @default(cuid())
+  key         String   @unique // e.g. home.hero, about.body, home.testimonials
+  title       String?
+  body        String?  @db.Text
+  // Structured JSON for repeatable content (testimonials, press logos, etc.).
+  data        Json?
+  isPublished Boolean  @default(true)
+  updatedAt   DateTime @updatedAt
+}
+
+// ----------------------------------------------------------------------------
+// Audit logging
+// ----------------------------------------------------------------------------
+
+model AuditLog {
+  id         String      @id @default(cuid())
+  action     AuditAction
+  actorId    String?
+  // Free-form target descriptor, e.g. "gallery:abc123".
+  target     String?
+  metadata   Json?
+  ipHash     String?
+  createdAt  DateTime    @default(now())
+
+  actor User? @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([action, createdAt])
+  @@index([actorId])
+}

@@ -1,0 +1,146 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ==========================================================================
+   Design tokens
+   Warm, restrained heritage palette. RGB triplets so Tailwind can apply alpha.
+   ========================================================================== */
+:root {
+  --color-ivory: 246 241 231; /* warm ivory ground */
+  --color-parchment: 239 231 214; /* parchment */
+  --color-stone: 168 158 141; /* stone */
+  --color-stone-soft: 210 202 187;
+  --color-stone-deep: 122 114 100;
+  --color-charcoal: 43 41 37; /* charcoal text */
+  --color-ink: 27 26 23; /* near-black */
+  --color-olive: 92 92 61; /* deep olive accent */
+  --color-burgundy: 106 46 46; /* muted burgundy */
+  --color-umber: 61 48 38; /* dark brown */
+
+  --ease-editorial: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ==========================================================================
+   Base
+   ========================================================================== */
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply bg-ivory text-charcoal font-sans antialiased;
+    font-feature-settings: 'kern' 1, 'liga' 1;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply font-serif text-ink;
+    font-weight: 400;
+  }
+
+  /* Refined, visible focus states for keyboard users. */
+  :focus-visible {
+    outline: 2px solid rgb(var(--color-olive));
+    outline-offset: 3px;
+  }
+
+  ::selection {
+    background: rgb(var(--color-olive) / 0.9);
+    color: rgb(var(--color-ivory));
+  }
+
+  /* Honour reduced-motion preferences. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+/* ==========================================================================
+   Components
+   ========================================================================== */
+@layer components {
+  .container-shell {
+    @apply mx-auto w-full max-w-shell px-gutter;
+  }
+
+  .eyebrow {
+    @apply font-sans text-eyebrow uppercase text-stone-deep;
+  }
+
+  .hairline {
+    @apply border-t border-hairline;
+  }
+
+  /* Buttons — understated, editorial. */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 font-sans text-xs uppercase tracking-widest
+      transition-colors duration-300 ease-editorial disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-primary {
+    @apply btn bg-charcoal px-7 py-3.5 text-ivory hover:bg-ink;
+  }
+
+  .btn-outline {
+    @apply btn border border-charcoal/70 px-7 py-3.5 text-charcoal hover:bg-charcoal hover:text-ivory;
+  }
+
+  .btn-ghost {
+    @apply btn px-3 py-2 text-charcoal hover:text-olive;
+  }
+
+  .btn-quiet {
+    @apply btn text-stone-deep underline decoration-stone-soft underline-offset-4 hover:text-charcoal;
+  }
+
+  /* Links with an elegant underline reveal. */
+  .link-underline {
+    @apply relative inline-block text-charcoal transition-colors hover:text-olive;
+  }
+
+  /* Forms. */
+  .field-label {
+    @apply mb-2 block font-sans text-xs uppercase tracking-widest text-stone-deep;
+  }
+
+  .field-input {
+    @apply w-full border border-hairline bg-transparent px-4 py-3 font-sans text-sm text-charcoal
+      transition-colors placeholder:text-stone focus:border-olive focus:outline-none;
+  }
+
+  .field-error {
+    @apply mt-2 font-sans text-xs text-burgundy;
+  }
+
+  .prose-editorial {
+    @apply max-w-measure font-serif text-lg leading-relaxed text-charcoal;
+  }
+}
+
+/* Utility to hide content visually but keep it available to screen readers. */
+@layer utilities {
+  .sr-only-focusable:not(:focus):not(:focus-within) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+}
